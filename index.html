@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>주간보고 작성 도구</title>
+<style>
+  :root{
+    --green: #C6E0B4;
+    --gray: #D9D9D9;
+    --blue-head: #DDEBF7;
+    --border: #7f7f7f;
+    --border-light: #bdbdbd;
+    --ink: #1f1f1f;
+    --accent: #2f5e8f;
+    --accent-dark: #1f3f61;
+    --bg: #f4f5f7;
+    --danger: #b3352c;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:"Malgun Gothic","Apple SD Gothic Neo",sans-serif;
+    background:var(--bg);
+    color:var(--ink);
+    padding:24px;
+  }
+  h1{font-size:20px;margin:0 0 4px;}
+  .sub{color:#555;font-size:13px;margin-bottom:18px;}
+
+  .toolbar{
+    display:flex;
+    flex-wrap:wrap;
+    gap:10px;
+    align-items:center;
+    background:#fff;
+    border:1px solid var(--border-light);
+    border-radius:8px;
+    padding:12px 14px;
+    margin-bottom:14px;
+  }
+  .toolbar label{font-size:13px;color:#444;margin-right:4px;}
+  .toolbar input[type=date], .toolbar select{
+    padding:6px 8px;border:1px solid var(--border-light);border-radius:6px;font-size:13px;
+  }
+  .divider{width:1px;align-self:stretch;background:var(--border-light);margin:0 4px;}
+  button{
+    font-family:inherit;font-size:13px;
+    border:1px solid var(--accent);
+    background:var(--accent);
+    color:#fff;
+    padding:7px 12px;
+    border-radius:6px;
+    cursor:pointer;
+  }
+  button:hover{background:var(--accent-dark);}
+  button.ghost{background:#fff;color:var(--accent);}
+  button.ghost:hover{background:#eef4fa;}
+  button.danger{background:#fff;color:var(--danger);border-color:var(--danger);}
+  button.danger:hover{background:#fbeceb;}
+  button.small{padding:3px 8px;font-size:12px;border-radius:5px;}
+
+  .status{font-size:12px;color:#2f7a3d;min-height:16px;}
+  .status.err{color:var(--danger);}
+
+  table{
+    width:100%;
+    border-collapse:collapse;
+    background:#fff;
+    table-layout:fixed;
+  }
+  th,td{
+    border:1px solid var(--border);
+    padding:6px 8px;
+    font-size:13px;
+    vertical-align:top;
+    text-align:left;
+  }
+  th{
+    background:var(--blue-head);
+    text-align:center;
+    font-weight:700;
+    font-size:13px;
+  }
+  th.dept-head{background:var(--green);}
+  td.dept{
+    background:var(--green);
+    text-align:center;
+    font-weight:700;
+    vertical-align:middle;
+  }
+  td.dept.gray{background:var(--gray);}
+  td[contenteditable]{
+    outline:none;
+    min-height:20px;
+    white-space:pre-wrap;
+    word-break:break-word;
+  }
+  td[contenteditable]:focus{
+    background:#fffde7;
+  }
+  .rowctl{
+    width:34px;text-align:center;background:#f0f0f0;cursor:pointer;color:#888;font-weight:700;
+  }
+  .rowctl:hover{color:var(--danger);}
+  .addrow-cell{
+    background:#f7f9fb;text-align:center;color:var(--accent);cursor:pointer;font-size:12px;
+  }
+  .addrow-cell:hover{text-decoration:underline;}
+
+  .group-footer{
+    display:flex;justify-content:flex-end;margin:6px 0 18px;
+  }
+  .bottom-actions{
+    display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;
+  }
+
+  /* modal */
+  .overlay{
+    position:fixed;inset:0;background:rgba(0,0,0,.45);
+    display:none;align-items:center;justify-content:center;z-index:50;
+  }
+  .overlay.show{display:flex;}
+  .modal{
+    background:#fff;border-radius:10px;padding:20px;width:420px;max-width:92vw;
+    box-shadow:0 10px 30px rgba(0,0,0,.2);
+  }
+  .modal h3{margin:0 0 12px;font-size:16px;}
+  .modal label{display:block;font-size:12px;color:#555;margin:10px 0 4px;}
+  .modal input, .modal textarea, .modal select{
+    width:100%;padding:8px;border:1px solid var(--border-light);border-radius:6px;font-size:13px;font-family:inherit;
+  }
+  .modal .row{display:flex;gap:8px;}
+  .modal .row>div{flex:1;}
+  .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;}
+  .hint{font-size:11px;color:#888;margin-top:4px;line-height:1.5;}
+  .weeklist{max-height:160px;overflow:auto;border:1px solid var(--border-light);border-radius:6px;margin-top:6px;}
+  .weeklist div{padding:7px 10px;font-size:13px;cursor:pointer;border-bottom:1px solid #eee;}
+  .weeklist div:last-child{border-bottom:none;}
+  .weeklist div:hover{background:#eef4fa;}
+</style>
+</head>
+<body>
+
+<h1>주간보고 작성 도구</h1>
+<div class="sub">지난주 데이터를 복제해 이번 주 양식을 만들고, 완료 후 GitHub에 저장하거나 이메일 초안을 열 수 있습니다.</div>
+
+<div class="toolbar">
+  <label>보고 주차 (월요일 기준)</label>
+  <input type="date" id="weekStart">
+  <span id="weekLabel" style="font-size:13px;color:#333;font-weight:600;"></span>
+  <div class="divider"></div>
+  <button class="ghost" id="btnLoadPrev">📋 지난주 불러와 복제</button>
+  <button class="ghost" id="btnSaveDraft">💾 이번 주 임시저장</button>
+  <div class="divider"></div>
+  <button id="btnGithub">⬆ GitHub에 저장</button>
+  <button id="btnEmail">✉ 이메일 초안 열기</button>
+</div>
+<div class="status" id="status"></div>
+
+<table id="reportTable">
+  <thead>
+    <tr>
+      <th class="dept-head" style="width:9%;">기술사업부서</th>
+      <th style="width:11%;">고객사</th>
+      <th style="width:9%;">담당 영업부서</th>
+      <th style="width:10%;">공통(기타)사항</th>
+      <th style="width:13%;">Pre-Sales</th>
+      <th style="width:13%;">Project 구축</th>
+      <th style="width:15%;">Post-Sales</th>
+      <th style="width:16%;">이슈사항(Issues &amp; Risks)</th>
+      <th style="width:6%;">비고</th>
+      <th style="width:3%;"></th>
+    </tr>
+  </thead>
+  <tbody id="tbody"></tbody>
+</table>
+
+<div class="bottom-actions">
+  <button class="ghost" id="btnAddGroup">＋ 부서 그룹 추가</button>
+</div>
+
+<!-- GitHub modal -->
+<div class="overlay" id="ghOverlay">
+  <div class="modal">
+    <h3>GitHub에 저장</h3>
+    <label>Personal Access Token</label>
+    <input type="password" id="ghToken" placeholder="ghp_xxxxxxxxxxxx">
+    <div class="hint">repo 쓰기 권한이 있는 토큰이 필요합니다. 브라우저 메모리에만 보관되며(선택 시 개인 저장소에 저장), 서버로 전송되지 않습니다.</div>
+    <label><input type="checkbox" id="ghRemember" style="width:auto;display:inline-block;margin-right:6px;">다음에도 사용하도록 이 브라우저에 저장</label>
+    <div class="row">
+      <div>
+        <label>저장소 (owner/repo)</label>
+        <input type="text" id="ghRepo" placeholder="예: myname/weekly-reports">
+      </div>
+      <div>
+        <label>브랜치</label>
+        <input type="text" id="ghBranch" placeholder="main" value="main">
+      </div>
+    </div>
+    <label>파일 경로</label>
+    <input type="text" id="ghPath" placeholder="예: reports/2026-W35.md">
+    <label>커밋 메시지</label>
+    <input type="text" id="ghMsg" placeholder="주간보고 업데이트">
+    <div class="modal-actions">
+      <button class="ghost" onclick="closeModal('ghOverlay')">취소</button>
+      <button id="ghSubmit">저장하기</button>
+    </div>
+    <div class="status" id="ghStatus"></div>
+  </div>
+</div>
+
+<!-- Email modal -->
+<div class="overlay" id="mailOverlay">
+  <div class="modal">
+    <h3>이메일 초안 열기</h3>
+    <label>받는 사람</label>
+    <input type="text" id="mailTo" placeholder="예: manager@company.com">
+    <label>제목</label>
+    <input type="text" id="mailSubject">
+    <div class="hint">기본 메일 프로그램이 새 창으로 열리며 표 내용이 본문에 채워집니다. 내용이 너무 길면 일부 메일 클라이언트에서 잘릴 수 있으니, 아래 "본문 복사"로 붙여넣으셔도 됩니다.</div>
+    <div class="modal-actions">
+      <button class="ghost" onclick="copyMailBody()">본문 복사</button>
+      <button class="ghost" onclick="closeModal('mailOverlay')">취소</button>
+      <button id="mailSubmit">메일 앱 열기</button>
+    </div>
+    <div class="status" id="mailStatus"></div>
+  </div>
+</div>
+
+<!-- Load-previous modal -->
+<div class="overlay" id="loadOverlay">
+  <div class="modal">
+    <h3>지난주 데이터 불러오기</h3>
+    <div class="hint">저장된 주차 목록입니다. 선택하면 현재 화면에 복제되어 이번 주 날짜로 채워집니다. (현재 작성 중인 내용은 덮어써집니다)</div>
+    <div class="weeklist" id="weekListBox"></div>
+    <div class="modal-actions">
+      <button class="ghost" onclick="closeModal('loadOverlay')">닫기</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const STORAGE_PREFIX = 'weekly-report:';
+let state = null; // {weekStart, groups:[{dept,color,rows:[{...}]}]}
+
+const COLS = ['customer','salesDept','common','preSales','projectBuild','postSales','issues','note'];
+
+function sampleData(){
+  return {
+    groups: [
+      {
+        dept: 'SSE기술팀', color: 'green',
+        rows: [
+          {customer:'삼성 그룹사', salesDept:'S&D사업본부', common:'', preSales:'', projectBuild:'', postSales:'Symantec Proxy, MC 등 점검 및 이슈 지원', issues:'MC API 활용한 자동화 문의 기술지원\n소만사 DLP 연동 기술지원 및 이슈대응\nHRI 기술문의 지원', note:''},
+          {customer:'한화큐셀', salesDept:'CSD사업본부', common:'', preSales:'', projectBuild:'', postSales:'Symantec Proxy, MC 등 이슈 지원', issues:'', note:''},
+          {customer:'CJ올리브네트웍스', salesDept:'E&P사업본부', common:'', preSales:'', projectBuild:'Palo Alto SASE 구축', postSales:'', issues:'통합 테스트 진행', note:''},
+          {customer:'한진 그룹사', salesDept:'DIT사업본부', common:'', preSales:'', projectBuild:'Palo Alto SASE 구축', postSales:'', issues:'', note:''},
+          {customer:'웰컴금융 그룹사', salesDept:'CSI사업본부', common:'Cloudflare SASE BMT 진행 지원', preSales:'', projectBuild:'', postSales:'', issues:'', note:''}
+        ]
+      },
+      {
+        dept: '공통/기타', color: 'gray',
+        rows: [
+          {customer:'Cisco 자격증 준비', salesDept:'', common:'', preSales:'', projectBuild:'', postSales:'', issues:'연말 목표', note:''},
+          {customer:'Palo Alto 자격증 준비', salesDept:'', common:'', preSales:'', projectBuild:'', postSales:'', issues:'연말 목표\n김준혁, 우주혁 연구원 취득 예정', note:''}
+        ]
+      }
+    ]
+  };
+}
+
+function emptyRow(){ return {customer:'',salesDept:'',common:'',preSales:'',projectBuild:'',postSales:'',issues:'',note:''}; }
+
+function mondayOf(d){
+  const dt = new Date(d);
+  const day = dt.getDay();
+  const diff = (day === 0 ? -6 : 1) - day;
+  dt.setDate(dt.getDate() + diff);
+  return dt;
+}
+function fmt(d){ return d.toISOString().slice(0,10); }
+function isoWeekKey(d){
+  const dt = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const dayNum = dt.getUTCDay() || 7;
+  dt.setUTCDate(dt.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(dt.getUTCFullYear(),0,1));
+  const weekNo = Math.ceil((((dt - yearStart) / 86400000) + 1)/7);
+  return `${dt.getUTCFullYear()}-W${String(weekNo).padStart(2,'0')}`;
+}
+function weekLabelText(mon){
+  const fri = new Date(mon); fri.setDate(fri.getDate()+4);
+  const f = d => `${d.getMonth()+1}/${d.getDate()}`;
+  return `(${f(mon)} ~ ${f(fri)})`;
+}
+
+function setStatus(msg, isErr){
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = 'status' + (isErr ? ' err' : '');
+  if(msg) setTimeout(()=>{ if(el.textContent===msg) el.textContent=''; }, 4000);
+}
+
+function render(){
+  const tbody = document.getElementById('tbody');
+  tbody.innerHTML = '';
+  state.groups.forEach((g, gi) => {
+    g.rows.forEach((row, ri) => {
+      const tr = document.createElement('tr');
+      if(ri === 0){
+        const deptTd = document.createElement('td');
+        deptTd.className = 'dept' + (g.color==='gray' ? ' gray' : '');
+        deptTd.rowSpan = g.rows.length;
+        deptTd.contentEditable = true;
+        deptTd.textContent = g.dept;
+        deptTd.addEventListener('input', ()=> g.dept = deptTd.textContent);
+        tr.appendChild(deptTd);
+      }
+      COLS.forEach(col => {
+        const td = document.createElement('td');
+        td.contentEditable = true;
+        td.textContent = row[col];
+        td.addEventListener('input', ()=> row[col] = td.textContent);
+        tr.appendChild(td);
+      });
+      const ctl = document.createElement('td');
+      ctl.className = 'rowctl';
+      ctl.textContent = '✕';
+      ctl.title = '이 행 삭제';
+      ctl.addEventListener('click', ()=>{
+        g.rows.splice(ri,1);
+        if(g.rows.length===0) state.groups.splice(gi,1);
+        render();
+      });
+      tr.appendChild(ctl);
+      tbody.appendChild(tr);
+    });
+    const addTr = document.createElement('tr');
+    const addTd = document.createElement('td');
+    addTd.colSpan = COLS.length + 2;
+    addTd.className = 'addrow-cell';
+    addTd.textContent = `+ ${g.dept || '이 그룹'}에 고객사 행 추가   |   그룹 전체 삭제`;
+    addTd.addEventListener('click', (e)=>{
+      // simple: click adds row; shift+click deletes group
+      if(e.shiftKey){
+        if(confirm(`"${g.dept}" 그룹 전체를 삭제할까요?`)){
+          state.groups.splice(gi,1);
+          render();
+        }
+      } else {
+        g.rows.push(emptyRow());
+        render();
+      }
+    });
+    addTr.appendChild(addTd);
+    tbody.appendChild(addTr);
+  });
+}
+
+document.getElementById('btnAddGroup').addEventListener('click', ()=>{
+  state.groups.push({dept:'새 부서', color:'green', rows:[emptyRow()]});
+  render();
+});
+
+// ---- week handling ----
+const weekStartInput = document.getElementById('weekStart');
+function currentMonday(){
+  return weekStartInput.value ? mondayOf(new Date(weekStartInput.value)) : mondayOf(new Date());
+}
+function refreshWeekLabel(){
+  document.getElementById('weekLabel').textContent = weekLabelText(currentMonday());
+}
+weekStartInput.value = fmt(mondayOf(new Date()));
+weekStartInput.addEventListener('change', refreshWeekLabel);
+refreshWeekLabel();
+
+function currentKey(){
+  return STORAGE_PREFIX + isoWeekKey(currentMonday());
+}
+
+async function initState(){
+  const key = currentKey();
+  try{
+    const res = await window.storage.get(key, false);
+    state = JSON.parse(res.value);
+  }catch(e){
+    state = sampleData();
+  }
+  render();
+}
+initState();
+
+document.getElementById('btnSaveDraft').addEventListener('click', async ()=>{
+  try{
+    await window.storage.set(currentKey(), JSON.stringify(state), false);
+    setStatus('이번 주(' + isoWeekKey(currentMonday()) + ') 내용을 저장했습니다.');
+  }catch(e){
+    setStatus('저장 실패: ' + e.message, true);
+  }
+});
+
+// ---- load previous week ----
+function openModal(id){ document.getElementById(id).classList.add('show'); }
+function closeModal(id){ document.getElementById(id).classList.remove('show'); }
+
+document.getElementById('btnLoadPrev').addEventListener('click', async ()=>{
+  const box = document.getElementById('weekListBox');
+  box.innerHTML = '불러오는 중...';
+  openModal('loadOverlay');
+  try{
+    const list = await window.storage.list(STORAGE_PREFIX, false);
+    const keys = (list && list.keys) ? list.keys.filter(k => k !== currentKey()).sort().reverse() : [];
+    if(keys.length === 0){
+      box.innerHTML = '<div style="cursor:default;color:#888;">저장된 지난 주차가 없습니다. 먼저 "이번 주 임시저장"으로 현재 주를 저장해두면 다음 주부터 여기 표시됩니다.</div>';
+      return;
+    }
+    box.innerHTML = '';
+    keys.forEach(k=>{
+      const label = k.replace(STORAGE_PREFIX,'');
+      const div = document.createElement('div');
+      div.textContent = label;
+      div.addEventListener('click', async ()=>{
+        try{
+          const res = await window.storage.get(k, false);
+          const data = JSON.parse(res.value);
+          state = JSON.parse(JSON.stringify(data)); // clone
+          render();
+          closeModal('loadOverlay');
+          setStatus(label + ' 데이터를 복제했습니다. 이번 주 날짜로 확인 후 저장하세요.');
+        }catch(e){
+          setStatus('불러오기 실패: ' + e.message, true);
+        }
+      });
+      box.appendChild(div);
+    });
+  }catch(e){
+    box.innerHTML = '<div style="color:#b3352c;">목록을 불러오지 못했습니다: ' + e.message + '</div>';
+  }
+});
+
+// ---- build markdown ----
+function buildMarkdown(){
+  const mon = currentMonday();
+  let md = `# 주간보고 ${isoWeekKey(mon)} ${weekLabelText(mon)}\n\n`;
+  md += '| 기술사업부서 | 고객사 | 담당 영업부서 | 공통(기타)사항 | Pre-Sales | Project 구축 | Post-Sales | 이슈사항(Issues & Risks) | 비고 |\n';
+  md += '|---|---|---|---|---|---|---|---|---|\n';
+  state.groups.forEach(g=>{
+    g.rows.forEach((row, ri)=>{
+      const deptCell = ri===0 ? g.dept : '';
+      const esc = s => (s||'').replace(/\n/g,'<br>').replace(/\|/g,'\\|');
+      md += `| ${esc(deptCell)} | ${esc(row.customer)} | ${esc(row.salesDept)} | ${esc(row.common)} | ${esc(row.preSales)} | ${esc(row.projectBuild)} | ${esc(row.postSales)} | ${esc(row.issues)} | ${esc(row.note)} |\n`;
+    });
+  });
+  return md;
+}
+
+function buildPlainText(){
+  const mon = currentMonday();
+  let txt = `[주간보고] ${isoWeekKey(mon)} ${weekLabelText(mon)}\n\n`;
+  state.groups.forEach(g=>{
+    txt += `■ ${g.dept}\n`;
+    g.rows.forEach(row=>{
+      txt += `- 고객사: ${row.customer} / 담당: ${row.salesDept}\n`;
+      if(row.common) txt += `  공통(기타): ${row.common}\n`;
+      if(row.preSales) txt += `  Pre-Sales: ${row.preSales}\n`;
+      if(row.projectBuild) txt += `  Project 구축: ${row.projectBuild}\n`;
+      if(row.postSales) txt += `  Post-Sales: ${row.postSales}\n`;
+      if(row.issues) txt += `  이슈사항: ${row.issues.replace(/\n/g,' / ')}\n`;
+      if(row.note) txt += `  비고: ${row.note}\n`;
+    });
+    txt += '\n';
+  });
+  return txt;
+}
+
+// ---- GitHub ----
+document.getElementById('btnGithub').addEventListener('click', async ()=>{
+  document.getElementById('ghPath').value = `reports/${isoWeekKey(currentMonday())}.md`;
+  document.getElementById('ghMsg').value = `주간보고 업데이트 (${isoWeekKey(currentMonday())})`;
+  try{
+    const res = await window.storage.get('gh-settings', false);
+    const s = JSON.parse(res.value);
+    document.getElementById('ghToken').value = s.token || '';
+    document.getElementById('ghRepo').value = s.repo || '';
+    document.getElementById('ghBranch').value = s.branch || 'main';
+    document.getElementById('ghRemember').checked = !!s.token;
+  }catch(e){ /* no saved settings */ }
+  openModal('ghOverlay');
+});
+
+document.getElementById('ghSubmit').addEventListener('click', async ()=>{
+  const token = document.getElementById('ghToken').value.trim();
+  const repo = document.getElementById('ghRepo').value.trim();
+  const branch = document.getElementById('ghBranch').value.trim() || 'main';
+  const path = document.getElementById('ghPath').value.trim();
+  const msg = document.getElementById('ghMsg').value.trim() || '주간보고 업데이트';
+  const ghStatus = document.getElementById('ghStatus');
+  if(!token || !repo || !path){
+    ghStatus.textContent = 'Token, 저장소, 파일 경로를 모두 입력해주세요.';
+    ghStatus.style.color = '#b3352c';
+    return;
+  }
+  ghStatus.textContent = '저장 중...';
+  ghStatus.style.color = '#555';
+  try{
+    if(document.getElementById('ghRemember').checked){
+      await window.storage.set('gh-settings', JSON.stringify({token, repo, branch}), false);
+    }
+    const apiUrl = `https://api.github.com/repos/${repo}/contents/${path}`;
+    let sha = undefined;
+    const getRes = await fetch(`${apiUrl}?ref=${encodeURIComponent(branch)}`, {
+      headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github+json' }
+    });
+    if(getRes.status === 200){
+      const getData = await getRes.json();
+      sha = getData.sha;
+    } else if(getRes.status !== 404){
+      const err = await getRes.json().catch(()=>({}));
+      throw new Error(err.message || `GET 실패 (${getRes.status})`);
+    }
+    const content = btoa(unescape(encodeURIComponent(buildMarkdown())));
+    const putRes = await fetch(apiUrl, {
+      method: 'PUT',
+      headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github+json', 'Content-Type':'application/json' },
+      body: JSON.stringify({ message: msg, content, branch, ...(sha ? {sha} : {}) })
+    });
+    if(!putRes.ok){
+      const err = await putRes.json().catch(()=>({}));
+      throw new Error(err.message || `저장 실패 (${putRes.status})`);
+    }
+    ghStatus.style.color = '#2f7a3d';
+    ghStatus.textContent = 'GitHub에 저장되었습니다.';
+    setTimeout(()=> closeModal('ghOverlay'), 1200);
+  }catch(e){
+    ghStatus.style.color = '#b3352c';
+    ghStatus.textContent = '오류: ' + e.message + ' (토큰 권한/저장소 이름/네트워크를 확인해주세요)';
+  }
+});
+
+// ---- Email ----
+document.getElementById('btnEmail').addEventListener('click', ()=>{
+  document.getElementById('mailSubject').value = `[주간보고] ${isoWeekKey(currentMonday())} ${weekLabelText(currentMonday())}`;
+  document.getElementById('mailStatus').textContent = '';
+  openModal('mailOverlay');
+});
+
+function copyMailBody(){
+  const body = buildPlainText();
+  navigator.clipboard.writeText(body).then(()=>{
+    document.getElementById('mailStatus').style.color = '#2f7a3d';
+    document.getElementById('mailStatus').textContent = '본문을 클립보드에 복사했습니다.';
+  }).catch(()=>{
+    document.getElementById('mailStatus').style.color = '#b3352c';
+    document.getElementById('mailStatus').textContent = '복사에 실패했습니다. 직접 선택해 복사해주세요.';
+  });
+}
+
+document.getElementById('mailSubmit').addEventListener('click', ()=>{
+  const to = document.getElementById('mailTo').value.trim();
+  const subject = document.getElementById('mailSubject').value.trim();
+  const body = buildPlainText();
+  const mailto = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  window.location.href = mailto;
+});
+</script>
+</body>
+</html>
