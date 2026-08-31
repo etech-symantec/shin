@@ -285,6 +285,40 @@ const DEFAULT_EMAIL_SETTINGS = {
   subjectTemplate: '[주간보고] {{week}} {{range}}',
   bodyTemplate: '{{content}}'
 };
+
+// Claude 아티팩트 화면 안에서는 window.storage(계정별 영구 저장)를 쓰고,
+// 이 HTML을 다운로드해서 로컬 브라우저에서 직접 열었을 때는
+// window.storage가 존재하지 않으므로 localStorage로 자동 대체합니다.
+const hasClaudeStorage = (typeof window !== 'undefined') && !!window.storage
+  && typeof window.storage.get === 'function';
+
+const storage = {
+  async get(key, shared = false){
+    if(hasClaudeStorage) return window.storage.get(key, shared);
+    const raw = localStorage.getItem(key);
+    if(raw === null) throw new Error('키를 찾을 수 없습니다: ' + key);
+    return { key, value: raw, shared };
+  },
+  async set(key, value, shared = false){
+    if(hasClaudeStorage) return window.storage.set(key, value, shared);
+    localStorage.setItem(key, value);
+    return { key, value, shared };
+  },
+  async delete(key, shared = false){
+    if(hasClaudeStorage) return window.storage.delete(key, shared);
+    localStorage.removeItem(key);
+    return { key, deleted: true, shared };
+  },
+  async list(prefix = '', shared = false){
+    if(hasClaudeStorage) return window.storage.list(prefix, shared);
+    const keys = [];
+    for(let i = 0; i < localStorage.length; i++){
+      const k = localStorage.key(i);
+      if(k && k.startsWith(prefix)) keys.push(k);
+    }
+    return { keys, prefix, shared };
+  }
+};
 let state = null; // {weekStart, groups:[{dept,color,rows:[{...}]}]}
 
 const COLS = ['customer','salesDept','common','preSales','projectBuild','postSales','issues','note'];
@@ -424,7 +458,7 @@ function currentKey(){
 async function initState(){
   const key = currentKey();
   try{
-    const res = await window.storage.get(key, false);
+    const res = await storage.get(key, false);
     state = JSON.parse(res.value);
   }catch(e){
     state = sampleData();
@@ -435,7 +469,7 @@ initState();
 
 document.getElementById('btnSaveDraft').addEventListener('click', async ()=>{
   try{
-    await window.storage.set(currentKey(), JSON.stringify(state), false);
+    await storage.set(currentKey(), JSON.stringify(state), false);
     setStatus('이번 주(' + isoWeekKey(currentMonday()) + ') 내용을 저장했습니다.');
   }catch(e){
     setStatus('저장 실패: ' + e.message, true);
@@ -451,7 +485,7 @@ document.getElementById('btnLoadPrev').addEventListener('click', async ()=>{
   box.innerHTML = '불러오는 중...';
   openModal('loadOverlay');
   try{
-    const list = await window.storage.list(STORAGE_PREFIX, false);
+    const list = await storage.list(STORAGE_PREFIX, false);
     const keys = (list && list.keys) ? list.keys.filter(k => k !== currentKey()).sort().reverse() : [];
     if(keys.length === 0){
       box.innerHTML = '<div style="cursor:default;color:#888;">저장된 지난 주차가 없습니다. 먼저 "이번 주 임시저장"으로 현재 주를 저장해두면 다음 주부터 여기 표시됩니다.</div>';
@@ -464,7 +498,7 @@ document.getElementById('btnLoadPrev').addEventListener('click', async ()=>{
       div.textContent = label;
       div.addEventListener('click', async ()=>{
         try{
-          const res = await window.storage.get(k, false);
+          const res = await storage.get(k, false);
           const data = JSON.parse(res.value);
           state = JSON.parse(JSON.stringify(data)); // clone
           render();
@@ -522,7 +556,7 @@ document.getElementById('btnGithub').addEventListener('click', async ()=>{
   document.getElementById('ghPath').value = `reports/${isoWeekKey(currentMonday())}.md`;
   document.getElementById('ghMsg').value = `주간보고 업데이트 (${isoWeekKey(currentMonday())})`;
   try{
-    const res = await window.storage.get('gh-settings', false);
+    const res = await storage.get('gh-settings', false);
     const s = JSON.parse(res.value);
     document.getElementById('ghToken').value = s.token || '';
     document.getElementById('ghRemember').checked = !!s.token;
@@ -546,7 +580,7 @@ document.getElementById('ghSubmit').addEventListener('click', async ()=>{
   ghStatus.style.color = '#555';
   try{
     if(document.getElementById('ghRemember').checked){
-      await window.storage.set('gh-settings', JSON.stringify({token}), false);
+      await storage.set('gh-settings', JSON.stringify({token}), false);
     }
     const apiUrl = `https://api.github.com/repos/${repo}/contents/${path}`;
     let sha = undefined;
@@ -582,7 +616,7 @@ document.getElementById('ghSubmit').addEventListener('click', async ()=>{
 // ---- Email templating ----
 async function loadEmailSettings(){
   try{
-    const res = await window.storage.get('email-settings', false);
+    const res = await storage.get('email-settings', false);
     return { ...DEFAULT_EMAIL_SETTINGS, ...JSON.parse(res.value) };
   }catch(e){
     return { ...DEFAULT_EMAIL_SETTINGS };
@@ -649,7 +683,7 @@ document.getElementById('tplSubmit').addEventListener('click', async ()=>{
   };
   const tplStatus = document.getElementById('tplStatus');
   try{
-    await window.storage.set('email-settings', JSON.stringify(settings), false);
+    await storage.set('email-settings', JSON.stringify(settings), false);
     tplStatus.style.color = '#2f7a3d';
     tplStatus.textContent = '템플릿을 저장했습니다.';
     setTimeout(()=> closeModal('mailSettingsOverlay'), 800);
