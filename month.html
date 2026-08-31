@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>이테크 일정 · 이번 달</title>
+<style>
+  :root{
+    --ink:#1c2430;
+    --paper:#f6f5f2;
+    --line:#dcd8cf;
+    --accent:#2f5d50;
+    --accent-soft:#e7efe9;
+    --muted:#7c7566;
+    --danger:#b8422f;
+    --mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Pretendard','Apple SD Gothic Neo','Segoe UI',sans-serif;
+    line-height:1.5;
+  }
+  .wrap{max-width:720px;margin:0 auto;padding:40px 20px 80px;}
+  header{margin-bottom:28px;}
+  .eyebrow{
+    font-family:var(--mono);
+    font-size:12px;
+    letter-spacing:.12em;
+    text-transform:uppercase;
+    color:var(--accent);
+    margin:0 0 8px;
+  }
+  h1{
+    font-size:28px;
+    margin:0 0 6px;
+    font-weight:700;
+    letter-spacing:-0.02em;
+  }
+  .sub{color:var(--muted);font-size:14px;margin:0;}
+
+  .config{
+    background:#fff;
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:18px 20px;
+    margin-bottom:24px;
+  }
+  .config summary{
+    cursor:pointer;
+    font-size:13px;
+    font-weight:600;
+    color:var(--muted);
+  }
+  .config .fields{margin-top:14px;display:grid;gap:10px;}
+  label{font-size:12px;color:var(--muted);display:block;margin-bottom:4px;}
+  input[type=text]{
+    width:100%;
+    padding:9px 10px;
+    border:1px solid var(--line);
+    border-radius:8px;
+    font-family:var(--mono);
+    font-size:13px;
+    background:var(--paper);
+  }
+
+  .actions{display:flex;gap:10px;margin-bottom:28px;flex-wrap:wrap;}
+  button{
+    font-family:inherit;
+    font-size:14px;
+    font-weight:600;
+    padding:11px 18px;
+    border-radius:8px;
+    border:1px solid var(--accent);
+    background:var(--accent);
+    color:#fff;
+    cursor:pointer;
+  }
+  button.secondary{
+    background:transparent;
+    color:var(--accent);
+  }
+  button:disabled{opacity:.5;cursor:not-allowed;}
+
+  #status{font-size:13px;color:var(--muted);margin-bottom:18px;min-height:18px;}
+  #status.error{color:var(--danger);}
+
+  .month-badge{
+    display:inline-block;
+    font-family:var(--mono);
+    font-size:12px;
+    background:var(--accent-soft);
+    color:var(--accent);
+    padding:4px 10px;
+    border-radius:999px;
+    margin-bottom:18px;
+  }
+
+  ul.events{list-style:none;margin:0;padding:0;}
+  .event{
+    display:flex;
+    gap:16px;
+    padding:16px 0;
+    border-top:1px solid var(--line);
+  }
+  .event:first-child{border-top:none;}
+  .date-col{
+    width:64px;
+    flex-shrink:0;
+    text-align:center;
+  }
+  .date-col .d{font-size:22px;font-weight:700;line-height:1;}
+  .date-col .w{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;}
+  .event-body{flex:1;min-width:0;}
+  .event-body .title{font-weight:600;font-size:15px;margin:0 0 4px;word-break:break-word;}
+  .event-body .meta{font-size:12.5px;color:var(--muted);}
+  .event-body a{color:var(--accent);text-decoration:none;}
+  .event-body a:hover{text-decoration:underline;}
+
+  .empty, .signin-note{
+    text-align:center;
+    padding:40px 20px;
+    color:var(--muted);
+    font-size:14px;
+    border:1px dashed var(--line);
+    border-radius:12px;
+  }
+  footer{margin-top:36px;font-size:12px;color:var(--muted);}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <p class="eyebrow">Google Calendar Live Filter</p>
+    <h1>이테크 일정</h1>
+    <p class="sub">이번 달 일정 중 제목에 "이테크"가 포함된 항목만 표시합니다.</p>
+  </header>
+
+  <details class="config">
+    <summary>⚙ 설정 (최초 1회 입력)</summary>
+    <div class="fields">
+      <div>
+        <label for="clientId">Google OAuth Client ID</label>
+        <input type="text" id="clientId" placeholder="xxxxxxxx.apps.googleusercontent.com">
+      </div>
+      <div>
+        <label for="calendarId">캘린더 ID</label>
+        <input type="text" id="calendarId" value="primary">
+      </div>
+      <div>
+        <label for="keyword">필터 키워드</label>
+        <input type="text" id="keyword" value="이테크">
+      </div>
+    </div>
+  </details>
+
+  <div class="actions">
+    <button id="loginBtn">Google 계정으로 로그인</button>
+    <button id="refreshBtn" class="secondary" disabled>새로고침</button>
+  </div>
+
+  <div id="status"></div>
+  <div id="monthBadge"></div>
+  <div id="results"></div>
+
+  <footer>
+    이 페이지는 브라우저에서 직접 Google Calendar API를 호출합니다. 데이터는 어디에도 저장되지 않습니다.
+  </footer>
+</div>
+
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script>
+  const SCOPE = 'https://www.googleapis.com/auth/calendar.readonly';
+  let tokenClient = null;
+  let accessToken = null;
+
+  const els = {
+    clientId: document.getElementById('clientId'),
+    calendarId: document.getElementById('calendarId'),
+    keyword: document.getElementById('keyword'),
+    loginBtn: document.getElementById('loginBtn'),
+    refreshBtn: document.getElementById('refreshBtn'),
+    status: document.getElementById('status'),
+    monthBadge: document.getElementById('monthBadge'),
+    results: document.getElementById('results'),
+  };
+
+  function setStatus(msg, isError){
+    els.status.textContent = msg || '';
+    els.status.classList.toggle('error', !!isError);
+  }
+
+  function monthRange(){
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    const end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    return { start, end, label: `${now.getFullYear()}년 ${now.getMonth()+1}월` };
+  }
+
+  function initTokenClientIfNeeded(){
+    const clientId = els.clientId.value.trim();
+    if(!clientId){
+      setStatus('먼저 설정에서 Google OAuth Client ID를 입력하세요.', true);
+      return null;
+    }
+    if(!tokenClient || tokenClient.__clientId !== clientId){
+      tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: clientId,
+        scope: SCOPE,
+        callback: (resp) => {
+          if(resp.error){
+            setStatus('로그인 실패: ' + resp.error, true);
+            return;
+          }
+          accessToken = resp.access_token;
+          els.refreshBtn.disabled = false;
+          setStatus('로그인 완료. 일정을 불러오는 중…');
+          fetchEvents();
+        },
+      });
+      tokenClient.__clientId = clientId;
+    }
+    return tokenClient;
+  }
+
+  els.loginBtn.addEventListener('click', () => {
+    const client = initTokenClientIfNeeded();
+    if(client) client.requestAccessToken({ prompt: accessToken ? '' : 'consent' });
+  });
+
+  els.refreshBtn.addEventListener('click', fetchEvents);
+
+  async function fetchEvents(){
+    if(!accessToken){
+      setStatus('먼저 로그인하세요.', true);
+      return;
+    }
+    const calendarId = encodeURIComponent(els.calendarId.value.trim() || 'primary');
+    const keyword = els.keyword.value.trim();
+    const { start, end, label } = monthRange();
+
+    els.monthBadge.innerHTML = `<span class="month-badge">${label}</span>`;
+    els.results.innerHTML = '';
+    setStatus('일정을 불러오는 중…');
+
+    const params = new URLSearchParams({
+      timeMin: start.toISOString(),
+      timeMax: end.toISOString(),
+      singleEvents: 'true',
+      orderBy: 'startTime',
+      maxResults: '250',
+    });
+
+    try{
+      const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events?${params}`, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      if(!res.ok){
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err?.error?.message || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      const items = (data.items || []).filter(ev => {
+        const title = ev.summary || '';
+        return keyword ? title.includes(keyword) : true;
+      });
+      renderEvents(items);
+      setStatus(`총 ${items.length}건의 '${keyword}' 일정을 찾았습니다.`);
+    }catch(e){
+      setStatus('불러오기 실패: ' + e.message, true);
+    }
+  }
+
+  function fmtDate(dt){
+    const isAllDay = !!dt.date;
+    const raw = dt.dateTime || dt.date;
+    const d = new Date(raw);
+    return {
+      day: d.getDate(),
+      weekday: d.toLocaleDateString('ko-KR', { weekday: 'short' }),
+      time: isAllDay ? '종일' : d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
+    };
+  }
+
+  function renderEvents(items){
+    if(items.length === 0){
+      els.results.innerHTML = '<div class="empty">이번 달에는 해당 키워드가 포함된 일정이 없습니다.</div>';
+      return;
+    }
+    const ul = document.createElement('ul');
+    ul.className = 'events';
+    items.forEach(ev => {
+      const { day, weekday, time } = fmtDate(ev.start);
+      const li = document.createElement('li');
+      li.className = 'event';
+      li.innerHTML = `
+        <div class="date-col">
+          <div class="d">${day}</div>
+          <div class="w">${weekday}</div>
+        </div>
+        <div class="event-body">
+          <p class="title">${escapeHtml(ev.summary || '(제목 없음)')}</p>
+          <p class="meta">${time}${ev.location ? ' · ' + escapeHtml(ev.location) : ''}${ev.htmlLink ? ` · <a href="${ev.htmlLink}" target="_blank" rel="noopener">캘린더에서 열기</a>` : ''}</p>
+        </div>
+      `;
+      ul.appendChild(li);
+    });
+    els.results.appendChild(ul);
+  }
+
+  function escapeHtml(str){
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  // 초기 안내
+  els.results.innerHTML = '<div class="signin-note">설정에 Client ID를 입력한 뒤 로그인하면 이번 달 일정이 표시됩니다.</div>';
+</script>
+</body>
+</html>
